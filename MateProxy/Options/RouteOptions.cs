@@ -1,4 +1,7 @@
-﻿namespace MateProxy.Options
+﻿using System;
+using ProxyKit;
+
+namespace MateProxy.Options
 {
     public class RouteOptions
     {
@@ -29,11 +32,6 @@
         /// </summary>
         public bool AddXForwardedHeaders { get; set; } = true;
 
-        /// <summary>
-        /// 証明書の検証をスキップするか。
-        /// </summary>
-        public bool SkipVerifyServerCertificate { get; set; }
-
         public void Validate()
         {
             if (string.IsNullOrEmpty(this.Path))
@@ -44,6 +42,15 @@
 
             if (string.IsNullOrEmpty(this.Upstream))
                 throw new OptionValidationException($"Upstream が指定されていません。 (Route '{this.Name}')");
+
+            try
+            {
+                _ = (UpstreamHost)this.Upstream;
+            }
+            catch (Exception ex)
+            {
+                throw new OptionValidationException($"Upstream が受理できない値です。 {ex.Message} (Route '{this.Name}')", ex);
+            }
         }
 
         public override string ToString()
