@@ -62,6 +62,7 @@ namespace MateProxy
                 }
 
                 options.Inspector.MountPath = this._options.InspectorPath;
+                options.Inspector.ResponseBodyDataTransformers.Add(new UngzipTransformer());
             });
 
             WebSocketProxyMiddleware.Setup(this._options.SkipVerifyServerCertificate);
