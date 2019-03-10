@@ -2,6 +2,7 @@
 using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using MateProxy.BodyDataTransformers;
 using MateProxy.Options;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -62,7 +63,8 @@ namespace MateProxy
                 }
 
                 options.Inspector.MountPath = this._options.InspectorPath;
-                options.Inspector.ResponseBodyDataTransformers.Add(new UngzipTransformer());
+                options.Inspector.RequestBodyDataTransformers.Add(BodyDataTransformerChain.DefaultRequestBodyDataTransformer);
+                options.Inspector.ResponseBodyDataTransformers.Add(BodyDataTransformerChain.DefaultResponseBodyDataTransformer);
             });
 
             WebSocketProxyMiddleware.Setup(this._options.SkipVerifyServerCertificate);
