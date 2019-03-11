@@ -10,34 +10,37 @@ namespace MateProxy.BodyDataTransformers
     {
         public static BodyDataTransformResult Ungzip(HttpRequestRecord record, BodyDataTransformResult previousResult)
         {
-            var contentEncoding = (string)record.ResponseHeaders["Content-Encoding"];
-
-            if (string.Equals(contentEncoding, "gzip", StringComparison.OrdinalIgnoreCase))
+            if (record.ResponseHeaders.TryGetValue("Content-Encoding", out var contentEncodingValues))
             {
-                using (var source = new MemoryStream(previousResult.Body))
-                using (var destination = new MemoryStream())
-                using (var gzip = new GZipStream(source, CompressionMode.Decompress))
-                {
-                    gzip.CopyTo(destination);
+                var contentEncoding = (string)contentEncodingValues;
 
-                    return new BodyDataTransformResult(
-                        destination.ToArray(),
-                        previousResult.ContentType,
-                        previousResult.TransformedContentType);
+                if (string.Equals(contentEncoding, "gzip", StringComparison.OrdinalIgnoreCase))
+                {
+                    using (var source = new MemoryStream(previousResult.Body))
+                    using (var destination = new MemoryStream())
+                    using (var gzip = new GZipStream(source, CompressionMode.Decompress))
+                    {
+                        gzip.CopyTo(destination);
+
+                        return new BodyDataTransformResult(
+                            destination.ToArray(),
+                            previousResult.ContentType,
+                            previousResult.TransformedContentType);
+                    }
                 }
-            }
-            else if (string.Equals(contentEncoding, "deflate", StringComparison.OrdinalIgnoreCase))
-            {
-                using (var source = new MemoryStream(previousResult.Body))
-                using (var destination = new MemoryStream())
-                using (var gzip = new DeflateStream(source, CompressionMode.Decompress))
+                else if (string.Equals(contentEncoding, "deflate", StringComparison.OrdinalIgnoreCase))
                 {
-                    gzip.CopyTo(destination);
+                    using (var source = new MemoryStream(previousResult.Body))
+                    using (var destination = new MemoryStream())
+                    using (var gzip = new DeflateStream(source, CompressionMode.Decompress))
+                    {
+                        gzip.CopyTo(destination);
 
-                    return new BodyDataTransformResult(
-                        destination.ToArray(),
-                        previousResult.ContentType,
-                        previousResult.TransformedContentType);
+                        return new BodyDataTransformResult(
+                            destination.ToArray(),
+                            previousResult.ContentType,
+                            previousResult.TransformedContentType);
+                    }
                 }
             }
 
