@@ -60,16 +60,12 @@ namespace MateProxy
 
             this._logger.LogInformation("Accepting WebSocket");
 
-            var forwardContext = context.ForwardTo(this._route.Upstream);
-            if (this._route.CopyXForwardedHeaders) forwardContext.CopyXForwardedHeaders();
-            if (this._route.AddXForwardedHeaders) forwardContext.AddXForwardedHeaders();
-
+            var forwardContext = context.ForwardTo(this._route.Upstream).ApplyRouteOptions(this._route);
             var upstreamRequest = forwardContext.UpstreamRequest;
 
             HttpResponseMessage upstreamResponse;
 
-            using (TimelineScope.Create("SendRequest", TimelineEventCategory.Data,
-               forwardContext.UpstreamRequest.RequestUri.ToString()))
+            using (TimelineScope.Create("SendRequest", TimelineEventCategory.Data, upstreamRequest.RequestUri.ToString()))
             {
                 upstreamResponse = await s_webSocketHttpClient.SendAsync(upstreamRequest, context.RequestAborted);
             }
@@ -102,8 +98,8 @@ namespace MateProxy
 
                     // ひたすらストリームを受け流す
                     await Task.WhenAll(
-                        clientStream.CopyToAsync(upstreamStream),
-                        upstreamStream.CopyToAsync(clientStream)
+                        clientStream.CopyToAsync(upstreamStream, context.RequestAborted),
+                        upstreamStream.CopyToAsync(clientStream, context.RequestAborted)
                     );
                 }
             }

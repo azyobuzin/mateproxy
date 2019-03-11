@@ -134,10 +134,7 @@ namespace MateProxy
 
         private static async Task<HttpResponseMessage> HandleRoute(RouteOptions route, HttpContext httpContext)
         {
-            var forwardContext = httpContext.ForwardTo(route.Upstream);
-
-            if (route.CopyXForwardedHeaders) forwardContext.CopyXForwardedHeaders();
-            if (route.AddXForwardedHeaders) forwardContext.AddXForwardedHeaders();
+            var forwardContext = httpContext.ForwardTo(route.Upstream).ApplyRouteOptions(route);
 
             using (TimelineScope.Create("SendRequest", TimelineEventCategory.Data,
                 forwardContext.UpstreamRequest.RequestUri.ToString()))

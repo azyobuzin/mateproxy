@@ -23,14 +23,19 @@ namespace MateProxy.Options
         public string Upstream { get; set; }
 
         /// <summary>
-        /// リクエストに含まれる X-Forwarded ヘッダーを転送先へのリクエストにも付与するか。
+        /// リクエストに含まれる X-Forwarded ヘッダーを転送先へのリクエストにもコピーするか。
         /// </summary>
         public bool CopyXForwardedHeaders { get; set; } = true;
 
         /// <summary>
-        /// このプロキシを通過したことを表す X-Forwarded ヘッダーを転送先へのリクエストに付与するか。
+        /// このプロキシを通過したことを表す X-Forwarded ヘッダーを転送先へのリクエストに追加するか。
         /// </summary>
         public bool AddXForwardedHeaders { get; set; } = true;
+
+        /// <summary>
+        /// 転送先へのリクエストの Host ヘッダー。
+        /// </summary>
+        public HostHeaderMode HostHeaderMode { get; set; } = HostHeaderMode.Upstream;
 
         public void Validate()
         {
@@ -49,7 +54,18 @@ namespace MateProxy.Options
             }
             catch (Exception ex)
             {
-                throw new OptionValidationException($"Upstream が受理できない値です。 {ex.Message} (Route '{this.Name}')", ex);
+                throw new OptionValidationException($"Upstream が受理できない値 '{this.Upstream}' です。 {ex.Message} (Route '{this.Name}')", ex);
+            }
+
+            switch (this.HostHeaderMode)
+            {
+                case HostHeaderMode.Upstream:
+                case HostHeaderMode.PreserveHost:
+                case HostHeaderMode.FirstXForwardedHost:
+                case HostHeaderMode.LastXForwardedHost:
+                    break;
+                default:
+                    throw new OptionValidationException($"HostHeaderMode が受理できない値 '{this.HostHeaderMode}' です。 Upstream、PreserveHost、FirstXForwardedHost、LastXForwardedHost のうちひとつを指定してください。");
             }
         }
 
@@ -59,5 +75,25 @@ namespace MateProxy.Options
                 ? $"{this.Path} -> {this.Upstream}"
                 : $"{this.Name} ({this.Path} -> {this.Upstream})";
         }
+    }
+
+    public enum HostHeaderMode
+    {
+        /// <summary>
+        /// <see cref="RouteOptions.Upstream"/> で指定した URI を使用します。
+        /// </summary>
+        Upstream,
+        /// <summary>
+        /// リクエストで指定された Host ヘッダーを使用します。
+        /// </summary>
+        PreserveHost,
+        /// <summary>
+        /// X-Forwarded-Host の最初の値を使用します。
+        /// </summary>
+        FirstXForwardedHost,
+        /// <summary>
+        /// X-Forwarded-Host の最後の値を使用します。
+        /// </summary>
+        LastXForwardedHost,
     }
 }
