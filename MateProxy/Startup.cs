@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -43,7 +44,8 @@ namespace MateProxy
 
             services.AddRin(options =>
             {
-                if (this._options.IncludePatterns?.Length > 0 || this._options.ExcludePatterns?.Length > 0)
+                if (this._options.IncludePathPatterns?.Length > 0 || this._options.ExcludePathPatterns?.Length > 0
+                    || this._options.IncludeHeaderPatterns?.Length > 0 || this._options.ExcludeHeaderPatterns?.Length > 0)
                     options.RequestRecorder.Excludes.Add(this.ExcludesRequest);
                 options.RequestRecorder.RetentionMaxRequests = this._options.RetentionMaxRequest > 0
                     ? this._options.RetentionMaxRequest : int.MaxValue;
@@ -74,13 +76,13 @@ namespace MateProxy
         {
             var path = (string)request.Path;
 
-            // IncludePatterns が設定されており、それらのどれにもマッチしないならば除外
-            var includePatterns = this._options.IncludePatterns;
-            if (includePatterns?.Length > 0)
+            // IncludePathPatterns が設定されており、それらのどれにもマッチしないならば除外
+            var includePathPatterns = this._options.IncludePathPatterns;
+            if (includePathPatterns?.Length > 0)
             {
                 var match = false;
 
-                foreach (var includePattern in includePatterns)
+                foreach (var includePattern in includePathPatterns)
                 {
                     if (Regex.IsMatch(path, includePattern))
                     {
@@ -92,14 +94,89 @@ namespace MateProxy
                 if (!match) return true;
             }
 
-            // ExcludePatterns にマッチするならば除外
-            var excludePatterns = this._options.ExcludePatterns;
-            if (excludePatterns?.Length > 0)
+            // ExcludePathPatterns にマッチするならば除外
+            var excludePathPatterns = this._options.ExcludePathPatterns;
+            if (excludePathPatterns?.Length > 0)
             {
-                foreach (var excludePattern in excludePatterns)
+                foreach (var excludePattern in excludePathPatterns)
                 {
                     if (Regex.IsMatch(path, excludePattern))
                         return true;
+                }
+            }
+
+            var headers = request.Headers;
+
+            // IncludeHeaderPatterns が設定されており、それらのどれにもマッチしないならば除外
+            var includeHeaderPatterns = this._options.IncludeHeaderPatterns;
+            if (includeHeaderPatterns?.Length > 0)
+            {
+                var match = false; // OR
+
+                foreach (var patternDic in includeHeaderPatterns)
+                {
+                    if (patternDic == null) continue;
+
+                    var headerPatterns = patternDic
+                        .Where(x => !string.IsNullOrEmpty(x.Key) && !string.IsNullOrEmpty(x.Value))
+                        .ToArray();
+
+                    if (headerPatterns.Length == 0) continue;
+
+                    var innerMatch = true; // AND
+
+                    foreach (var (key, pattern) in headerPatterns)
+                    {
+                        headers.TryGetValue(key, out var headerValues);
+                        // ToString で ?? string.Empty される
+                        var headerValue = headerValues.ToString();
+
+                        if (!Regex.IsMatch(headerValue, pattern))
+                        {
+                            innerMatch = false;
+                            break;
+                        }
+                    }
+
+                    if (innerMatch)
+                    {
+                        match = true;
+                        break;
+                    }
+                }
+
+                if (!match) return true;
+            }
+
+            // ExcludeHeaderPatterns にマッチするならば除外
+            var excludeHeaderPatterns = this._options.ExcludeHeaderPatterns;
+            if (excludeHeaderPatterns?.Length > 0)
+            {
+                foreach (var patternDic in excludeHeaderPatterns)
+                {
+                    if (patternDic == null) continue;
+
+                    var headerPatterns = patternDic
+                        .Where(x => !string.IsNullOrEmpty(x.Key) && !string.IsNullOrEmpty(x.Value))
+                        .ToArray();
+
+                    if (headerPatterns.Length == 0) continue;
+
+                    var innerMatch = true; // AND
+
+                    foreach (var (key, pattern) in headerPatterns)
+                    {
+                        headers.TryGetValue(key, out var headerValues);
+                        var headerValue = headerValues.ToString();
+
+                        if (!Regex.IsMatch(headerValue, pattern))
+                        {
+                            innerMatch = false;
+                            break;
+                        }
+                    }
+
+                    if (innerMatch) return true; // OR
                 }
             }
 

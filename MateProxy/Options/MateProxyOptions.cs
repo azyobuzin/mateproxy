@@ -1,18 +1,31 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace MateProxy.Options
 {
     public class MateProxyOptions
     {
+        // TODO: ちょうどいい感じのフィルタリング設定
+
         /// <summary>
         /// 1件以上指定すると、正規表現パターンに一致するパスへのリクエストのみを記録します。
         /// </summary>
-        public string[] IncludePatterns { get; set; }
+        public string[] IncludePathPatterns { get; set; }
 
         /// <summary>
         /// 正規表現パターンに一致するパスへのリクエストを除外します。
         /// </summary>
-        public string[] ExcludePatterns { get; set; }
+        public string[] ExcludePathPatterns { get; set; }
+
+        /// <summary>
+        /// 1件以上指定すると、正規表現パターンに一致するヘッダーを持つリクエストのみを記録します。
+        /// </summary>
+        public Dictionary<string, string>[] IncludeHeaderPatterns { get; set; }
+
+        /// <summary>
+        /// 正規表現パターンに一致するヘッダーを持つリクエストを除外します。
+        /// </summary>
+        public Dictionary<string, string>[] ExcludeHeaderPatterns { get; set; }
 
         /// <summary>
         /// 最新何件のリクエストを保存するか。
