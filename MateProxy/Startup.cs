@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -10,8 +12,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using ProxyKit;
-using Rin.Core.Record;
+using Yarp.ReverseProxy.Forwarder;
 
 namespace MateProxy
 {
@@ -27,19 +28,7 @@ namespace MateProxy
 
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddProxy(httpClientBuilder =>
-            {
-                if (this._options.SkipVerifyServerCertificate)
-                {
-                    httpClientBuilder.ConfigurePrimaryHttpMessageHandler(() =>
-                        new HttpClientHandler
-                        {
-                            AllowAutoRedirect = false,
-                            UseCookies = false,
-                            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-                        });
-                }
-            });
+            services.AddHttpForwarder();
 
             var rinBuilder = services.AddRin(options =>
             {
@@ -68,8 +57,6 @@ namespace MateProxy
 
             services.AddSingleton(BodyDataTransformerChain.DefaultRequestBodyDataTransformer);
             services.AddSingleton(BodyDataTransformerChain.DefaultResponseBodyDataTransformer);
-
-            WebSocketProxyMiddleware.Setup(this._options.SkipVerifyServerCertificate);
         }
 
         private bool ExcludesRequest(HttpRequest request)
@@ -183,8 +170,25 @@ namespace MateProxy
             return false;
         }
 
-        public void Configure(IApplicationBuilder app, ILogger<Startup> log)
+        public void Configure(IApplicationBuilder app, ILogger<Startup> log, IHttpForwarder forwarder)
         {
+            var handler = new SocketsHttpHandler()
+            {
+                AllowAutoRedirect = false,
+                AutomaticDecompression = DecompressionMethods.None,
+                UseCookies = false,
+                PooledConnectionLifetime = TimeSpan.Zero,
+                ActivityHeadersPropagator = new ReverseProxyPropagator(DistributedContextPropagator.Current),
+            };
+
+            if (this._options.SkipVerifyServerCertificate)
+            {
+                handler.SslOptions.RemoteCertificateValidationCallback =
+                    (sender, certificate, chain, sslPolicyErrors) => true;
+            }
+
+            var httpClient = new HttpMessageInvoker(handler);
+
             app.UseRin();
 
             foreach (var route in this._options.Routes)
@@ -195,29 +199,67 @@ namespace MateProxy
 
                 app.Map(route.Path.TrimEnd('/'), builder =>
                 {
-                    builder.Use((context, next) =>
+                    builder.Run(async context =>
                     {
                         log.LogInformation(
                             "Use route '{RouteName}' ({Path} -> {Upstream})",
                             route.Name, route.Path, route.Upstream);
-                        return next();
+
+                        await forwarder.SendAsync(context, route.Upstream, httpClient,
+                            (context, request) => TransformRequest(context, request, route));
                     });
-                    builder.UseWebSockets();
-                    builder.UseMiddleware(typeof(WebSocketProxyMiddleware), route);
-                    builder.RunProxy(context => HandleRoute(route, context));
                 });
             }
         }
 
-        private static async Task<HttpResponseMessage> HandleRoute(RouteOptions route, HttpContext httpContext)
+        private ValueTask TransformRequest(HttpContext context, HttpRequestMessage request, RouteOptions route)
         {
-            var forwardContext = httpContext.ForwardTo(route.Upstream).ApplyRouteOptions(route);
-
-            using (TimelineScope.Create("SendRequest", TimelineEventCategory.Data,
-                forwardContext.UpstreamRequest.RequestUri.ToString()))
+            if (!route.CopyXForwardedHeaders)
             {
-                return await forwardContext.Send();
+                foreach (var header in request.Headers
+                    .Select(x => x.Key)
+                    .Where(x => x.StartsWith("X-Forwarded-", StringComparison.OrdinalIgnoreCase))
+                    .ToArray())
+                {
+                    request.Headers.Remove(header);
+                }
             }
+
+            if (route.AddXForwardedHeaders)
+            {
+                var remoteIp = context.Connection.RemoteIpAddress?.ToString();
+                if (remoteIp != null)
+                    request.Headers.TryAddWithoutValidation("X-Forwarded-For", remoteIp);
+
+                var host = context.Request.Headers.Host;
+                if (host.Count > 0)
+                    request.Headers.TryAddWithoutValidation("X-Forwarded-Host", (string)host);
+
+                request.Headers.TryAddWithoutValidation("X-Forwarded-Proto", context.Request.Scheme);
+
+                var pathBase = context.Request.PathBase.Value;
+                if (pathBase != null)
+                    request.Headers.TryAddWithoutValidation("X-Forwarded-PathBase", pathBase);
+            }
+
+            if (route.HostHeaderMode == HostHeaderMode.Upstream)
+            {
+                request.Headers.Host = null;
+            }
+            else if (context.Request.Headers.TryGetValue("X-Forwarded-Host", out var forwardedHostValues)
+                && forwardedHostValues.Count > 0)
+            {
+                if (route.HostHeaderMode == HostHeaderMode.FirstXForwardedHost)
+                {
+                    request.Headers.Host = forwardedHostValues[0];
+                }
+                else if (route.HostHeaderMode == HostHeaderMode.LastXForwardedHost)
+                {
+                    request.Headers.Host = forwardedHostValues[forwardedHostValues.Count - 1];
+                }
+            }
+
+            return default;
         }
     }
 }

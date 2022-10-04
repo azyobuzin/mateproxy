@@ -7,9 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ProxyKit" Version="2.0.4" />
     <PackageReference Include="Rin" Version="2.6.0" />
     <PackageReference Include="Rin.Storage.Redis" Version="2.6.0" />
+    <PackageReference Include="Yarp.ReverseProxy" Version="1.1.1" />
   </ItemGroup>
 
 </Project>

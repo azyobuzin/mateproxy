@@ -1,7 +1,4 @@
-﻿using System;
-using ProxyKit;
-
-namespace MateProxy.Options
+﻿namespace MateProxy.Options
 {
     public class RouteOptions
     {
@@ -47,15 +44,6 @@ namespace MateProxy.Options
 
             if (string.IsNullOrEmpty(this.Upstream))
                 throw new OptionValidationException($"Upstream が指定されていません。 (Route '{this.Name}')");
-
-            try
-            {
-                _ = (UpstreamHost)this.Upstream;
-            }
-            catch (Exception ex)
-            {
-                throw new OptionValidationException($"Upstream が受理できない値 '{this.Upstream}' です。 {ex.Message} (Route '{this.Name}')", ex);
-            }
 
             switch (this.HostHeaderMode)
             {
