@@ -1,48 +1,56 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Extensions.Primitives;
 using Rin.Core;
 using Rin.Core.Record;
 
 namespace MateProxy.BodyDataTransformers
 {
-    public class BodyDataTransformerChain : BodyDataTransformer
+    public class BodyDataTransformerChain : IRequestBodyDataTransformer, IResponseBodyDataTransformer
     {
-        public delegate BodyDataTransformResult TransformDelegate(HttpRequestRecord record, BodyDataTransformResult previoutResult);
+        private readonly IReadOnlyList<IBodyDataTransformer> _transformers;
 
-        public IList<TransformDelegate> Transformers { get; } = new List<TransformDelegate>();
-
-        public override bool CanTransform(HttpRequestRecord record, StringValues contentTypeHeaderValues)
+        public BodyDataTransformerChain(IReadOnlyList<IBodyDataTransformer> transformers)
         {
-            if (contentTypeHeaderValues.Count != 1) return false;
-
-            return this.Transformers.Count > 0;
+            this._transformers = transformers;
         }
 
-        public override BodyDataTransformResult Transform(HttpRequestRecord record, byte[] body, StringValues contentTypeHeaderValues)
+        public bool CanTransform(HttpRequestRecord record, StringValues contentTypeHeaderValues)
         {
-            var result = new BodyDataTransformResult(body, contentTypeHeaderValues, "");
-
-            foreach (var transformer in this.Transformers)
-                result = transformer(record, result);
-
-            return result;
+            return this._transformers.Any(transformer => transformer.CanTransform(record, contentTypeHeaderValues));
         }
 
-        public static IBodyDataTransformer DefaultRequestBodyDataTransformer { get; } = new BodyDataTransformerChain()
+        public bool TryTransform(HttpRequestRecord record, ReadOnlySpan<byte> body, StringValues contentTypeHeaderValues, out BodyDataTransformResult result)
         {
-            Transformers =
-            {
-                CommonTransformers.JsonApplication,
-            }
-        };
+            var transformed = false;
+            result = default;
 
-        public static IBodyDataTransformer DefaultResponseBodyDataTransformer { get; } = new BodyDataTransformerChain()
-        {
-            Transformers =
+            foreach (var transformer in this._transformers)
             {
-                ResponseTransformers.Ungzip,
-                CommonTransformers.JsonApplication,
+                var prevResult = result;
+                if (transformer.TryTransform(record, body, contentTypeHeaderValues, out result))
+                {
+                    transformed = true;
+                    body = result.Body;
+                    contentTypeHeaderValues = result.TransformedContentType;
+                }
+                else
+                {
+                    result = prevResult;
+                }
             }
-        };
+
+            return transformed;
+        }
+
+        public static IRequestBodyDataTransformer DefaultRequestBodyDataTransformer { get; } = new BodyDataTransformerChain(new IBodyDataTransformer[] {
+            new JsonApplicationTransformer(),
+        });
+
+        public static IResponseBodyDataTransformer DefaultResponseBodyDataTransformer { get; } = new BodyDataTransformerChain(new IBodyDataTransformer[] {
+            new UngzipTransformer(),
+            new JsonApplicationTransformer(),
+        });
     }
 }

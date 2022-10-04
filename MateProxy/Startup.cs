@@ -12,7 +12,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ProxyKit;
 using Rin.Core.Record;
-using Rin.Storage.Redis;
 
 namespace MateProxy
 {
@@ -42,7 +41,7 @@ namespace MateProxy
                 }
             });
 
-            services.AddRin(options =>
+            var rinBuilder = services.AddRin(options =>
             {
                 if (this._options.IncludePathPatterns?.Length > 0 || this._options.ExcludePathPatterns?.Length > 0
                     || this._options.IncludeHeaderPatterns?.Length > 0 || this._options.ExcludeHeaderPatterns?.Length > 0)
@@ -52,22 +51,23 @@ namespace MateProxy
                 options.RequestRecorder.EnableBodyCapturing = this._options.EnableBodyCapturing;
                 options.RequestRecorder.AllowRunningOnProduction = true;
 
-                if (this._options.Storage == StorageKind.Redis)
+                options.Inspector.MountPath = this._options.InspectorPath;
+            });
+
+            if (this._options.Storage == StorageKind.Redis)
+            {
+                rinBuilder.UseRedisStorage(options =>
                 {
-                    options.RequestRecorder.StorageFactory = RedisRecordStorage.DefaultFactoryWithOptions(redisOptions =>
-                    {
-                        redisOptions.Expiry = this._options.RedisExpirationSeconds > 0
+                    options.Expiry = this._options.RedisExpirationSeconds > 0
                             ? TimeSpan.FromSeconds(this._options.RedisExpirationSeconds)
                             : TimeSpan.MaxValue;
-                        redisOptions.KeyPrefix = this._options.RedisKeyPrefix ?? "";
-                        redisOptions.ConnectionConfiguration = this._options.RedisConnectionConfiguration;
-                    });
-                }
+                    options.KeyPrefix = this._options.RedisKeyPrefix ?? "";
+                    options.ConnectionConfiguration = this._options.RedisConnectionConfiguration;
+                });
+            }
 
-                options.Inspector.MountPath = this._options.InspectorPath;
-                options.Inspector.RequestBodyDataTransformers.Add(BodyDataTransformerChain.DefaultRequestBodyDataTransformer);
-                options.Inspector.ResponseBodyDataTransformers.Add(BodyDataTransformerChain.DefaultResponseBodyDataTransformer);
-            });
+            services.AddSingleton(BodyDataTransformerChain.DefaultRequestBodyDataTransformer);
+            services.AddSingleton(BodyDataTransformerChain.DefaultResponseBodyDataTransformer);
 
             WebSocketProxyMiddleware.Setup(this._options.SkipVerifyServerCertificate);
         }

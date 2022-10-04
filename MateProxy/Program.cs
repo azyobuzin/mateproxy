@@ -15,7 +15,7 @@ namespace MateProxy
             WebHost.CreateDefaultBuilder(args)
                 .ConfigureLogging(builder =>
                 {
-                    builder.UseRinLogger();
+                    builder.AddRinLogger();
                 })
                 .UseStartup<Startup>();
     }

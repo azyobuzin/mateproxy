@@ -5,8 +5,6 @@ namespace MateProxy.Options
 {
     public class MateProxyOptions
     {
-        // TODO: ちょうどいい感じのフィルタリング設定
-
         /// <summary>
         /// 1件以上指定すると、正規表現パターンに一致するパスへのリクエストのみを記録します。
         /// </summary>
